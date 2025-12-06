@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "540ehJ5Hv2Q=",
+  "success": true,
+  "projectFilePath": "/Users/diyarandak/RiderProjects/Net9Odev/Net9Odev/Net9Odev.csproj",
+  "expectedPackageFiles": [
+    "/Users/diyarandak/.nuget/packages/microsoft.aspnetcore.openapi/9.0.9/microsoft.aspnetcore.openapi.9.0.9.nupkg.sha512",
+    "/Users/diyarandak/.nuget/packages/microsoft.openapi/1.6.17/microsoft.openapi.1.6.17.nupkg.sha512"
+  ],
+  "logs": []
+}
