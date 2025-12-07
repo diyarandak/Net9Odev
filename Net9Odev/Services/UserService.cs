@@ -6,6 +6,8 @@ using Microsoft.IdentityModel.Tokens;
 using Net9Odev.Data;
 using Net9Odev.DTOs;
 using Net9Odev.Entities;
+// Şifreleme kütüphanesi
+using BCrypt.Net; 
 
 namespace Net9Odev.Services;
 
@@ -31,11 +33,14 @@ public class UserService : IUserService
         if (await _context.Users.AnyAsync(u => u.Email == request.Email))
             throw new Exception("Bu e-posta zaten kayıtlı.");
 
+        // DÜZELTME 1: Şifreyi Hash'leyerek kaydet
+        var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+
         var newUser = new User
         {
             FullName = request.FullName,
             Email = request.Email,
-            Password = request.Password, // Gerçek hayatta hashlenmeli
+            Password = passwordHash, // Hashlenmiş şifre
             Role = request.Role
         };
 
@@ -46,10 +51,12 @@ public class UserService : IUserService
 
     public async Task<string?> LoginAsync(UserLoginDto request)
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email && u.Password == request.Password);
-        if (user == null) return null;
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+        
+        // DÜZELTME 2: Şifre kontrolünü Hash üzerinden yap
+        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.Password))
+            return null;
 
-        // Token Üretimi
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.UTF8.GetBytes(_configuration["JwtSettings:SecretKey"]!);
         var tokenDescriptor = new SecurityTokenDescriptor
@@ -69,7 +76,6 @@ public class UserService : IUserService
         return tokenHandler.WriteToken(token);
     }
 
-    // GÜNCELLEME (Yeni)
     public async Task<bool> UpdateAsync(int id, UpdateUserDto request)
     {
         var user = await _context.Users.FindAsync(id);
@@ -83,13 +89,12 @@ public class UserService : IUserService
         return true;
     }
 
-    // SİLME (Yeni)
     public async Task<bool> DeleteAsync(int id)
     {
         var user = await _context.Users.FindAsync(id);
         if (user == null) return false;
 
-        _context.Users.Remove(user);
+        _context.Users.Remove(user); // Soft delete otomatik çalışacak
         await _context.SaveChangesAsync();
         return true;
     }

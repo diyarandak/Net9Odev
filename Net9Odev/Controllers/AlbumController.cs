@@ -16,63 +16,60 @@ public class AlbumController : ControllerBase
         _albumService = albumService;
     }
 
-    // 1. GET ALL
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
         var result = await _albumService.GetAllAsync();
-        return Ok(new { success = true, data = result });
+        return Ok(ApiResponse<List<AlbumResponseDto>>.Ok(result, "Albümler listelendi"));
     }
 
-    // 2. GET BY ID (Yeni)
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(int id)
     {
         var result = await _albumService.GetByIdAsync(id);
-        if (result == null) return NotFound(new { success = false, message = "Albüm bulunamadı" });
-        return Ok(new { success = true, data = result });
+        return result is null 
+            ? NotFound(ApiResponse<object>.Fail("Albüm bulunamadı")) 
+            : Ok(ApiResponse<AlbumResponseDto>.Ok(result));
     }
 
-    // 3. CREATE
-    [Authorize] // Kilitli
+    [Authorize]
     [HttpPost]
     public async Task<IActionResult> Create(CreateAlbumDto request)
     {
         try
         {
             var id = await _albumService.CreateAsync(request);
-            return Ok(new { success = true, message = "Albüm eklendi", data = new { id } });
+            // 201 Created
+            return CreatedAtAction(nameof(GetById), new { id }, ApiResponse<object>.Ok(new { id }, "Albüm eklendi"));
         }
         catch (Exception ex)
         {
-            return BadRequest(new { success = false, message = ex.Message });
+            return BadRequest(ApiResponse<object>.Fail(ex.Message));
         }
     }
 
-    // 4. UPDATE (Yeni)
-    [Authorize] // Kilitli
+    [Authorize]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, UpdateAlbumDto request)
     {
         try
         {
-            var success = await _albumService.UpdateAsync(id, request);
-            if (!success) return NotFound(new { success = false, message = "Albüm bulunamadı" });
-            return Ok(new { success = true, message = "Albüm güncellendi" });
+            return await _albumService.UpdateAsync(id, request) 
+                ? Ok(ApiResponse<object>.Ok(null, "Albüm güncellendi")) 
+                : NotFound(ApiResponse<object>.Fail("Albüm bulunamadı"));
         }
         catch (Exception ex)
         {
-            return BadRequest(new { success = false, message = ex.Message });
+            return BadRequest(ApiResponse<object>.Fail(ex.Message));
         }
     }
 
-    // 5. DELETE (Yeni)
-    [Authorize] // Kilitli
+    [Authorize]
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var success = await _albumService.DeleteAsync(id);
-        if (!success) return NotFound(new { success = false, message = "Albüm bulunamadı" });
-        return Ok(new { success = true, message = "Albüm silindi" });
+        return await _albumService.DeleteAsync(id) 
+            ? Ok(ApiResponse<object>.Ok(null, "Albüm silindi")) 
+            : NotFound(ApiResponse<object>.Fail("Albüm bulunamadı"));
     }
 }

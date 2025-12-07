@@ -17,35 +17,53 @@ public class UserController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll() => Ok(new { success = true, data = await _userService.GetAllAsync() });
+    public async Task<IActionResult> GetAll()
+    {
+        var data = await _userService.GetAllAsync();
+        return Ok(ApiResponse<List<UserResponseDto>>.Ok(data, "Kullanıcılar listelendi"));
+    }
 
     [HttpPost("register")]
     public async Task<IActionResult> Register(UserRegisterDto request)
     {
-        try { return Ok(new { success = true, message = "Kayıt başarılı", id = await _userService.RegisterAsync(request) }); }
-        catch (Exception ex) { return Conflict(new { success = false, message = ex.Message }); }
+        try 
+        { 
+            var id = await _userService.RegisterAsync(request);
+            // 201 Created standartlara uygun
+            return Created("", ApiResponse<object>.Ok(new { id }, "Kayıt başarılı")); 
+        }
+        catch (Exception ex) 
+        { 
+            // 409 Conflict (Zaten kayıtlı hatası için)
+            return Conflict(ApiResponse<object>.Fail(ex.Message)); 
+        }
     }
 
     [HttpPost("login")]
     public async Task<IActionResult> Login(UserLoginDto request)
     {
         var token = await _userService.LoginAsync(request);
-        if (token == null) return Unauthorized(new { success = false, message = "E-posta veya şifre hatalı" });
-        return Ok(new { success = true, message = "Giriş başarılı", data = new { Token = token } });
+        if (token == null) 
+            return Unauthorized(ApiResponse<object>.Fail("E-posta veya şifre hatalı"));
+            
+        return Ok(ApiResponse<object>.Ok(new { Token = token }, "Giriş başarılı"));
     }
 
-    // YENİ EKLENENLER
     [Authorize]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, UpdateUserDto request)
     {
-        return await _userService.UpdateAsync(id, request) ? Ok(new { success = true, message = "Kullanıcı güncellendi" }) : NotFound();
+        return await _userService.UpdateAsync(id, request) 
+            ? Ok(ApiResponse<object>.Ok(null, "Kullanıcı güncellendi")) 
+            : NotFound(ApiResponse<object>.Fail("Kullanıcı bulunamadı"));
     }
 
     [Authorize]
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
-        return await _userService.DeleteAsync(id) ? Ok(new { success = true, message = "Kullanıcı silindi" }) : NotFound();
+        return await _userService.DeleteAsync(id) 
+            ? Ok(ApiResponse<object>.Ok(null, "Kullanıcı silindi")) 
+            : NotFound(ApiResponse<object>.Fail("Kullanıcı bulunamadı"));
     }
 }
