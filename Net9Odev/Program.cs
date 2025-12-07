@@ -6,6 +6,7 @@ using Microsoft.OpenApi.Models;
 using Net9Odev.Data;
 using Net9Odev.DTOs;
 using Net9Odev.Services;
+using Net9Odev.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,10 +14,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-builder.Services.AddControllers(); // Diğerleri (Album, User) için Controller açık
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// Tüm Servisleri Tanıtıyoruz
+// Servisler
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IArtistService, ArtistService>();
 builder.Services.AddScoped<IAlbumService, AlbumService>();
@@ -24,17 +25,13 @@ builder.Services.AddScoped<ISongService, SongService>();
 builder.Services.AddScoped<ILabelService, LabelService>();
 builder.Services.AddScoped<IConcertService, ConcertService>();
 
-// Swagger ve Kilit Ayarı
+// Swagger
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Net9Odev API", Version = "v1" });
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Name = "Authorization",
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer",
-        In = ParameterLocation.Header,
-        Description = "Bearer {token}"
+        Name = "Authorization", Type = SecuritySchemeType.ApiKey, Scheme = "Bearer", In = ParameterLocation.Header, Description = "Bearer {token}"
     });
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
@@ -42,7 +39,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// JWT Şifre Ayarı
+// JWT
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]!);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -50,19 +47,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSettings["Issuer"],
-            ValidAudience = jwtSettings["Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(secretKey)
+            ValidateIssuer = true, ValidateAudience = true, ValidateLifetime = true, ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSettings["Issuer"], ValidAudience = jwtSettings["Audience"], IssuerSigningKey = new SymmetricSecurityKey(secretKey)
         };
     });
 
 var app = builder.Build();
 
-// 2. ÇALIŞMA AYARLARI
+// 2. PIPELINE
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -70,29 +62,52 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// ★ HATA YAKALAMA VE FORMATLAMA ★
+app.UseMiddleware<GlobalExceptionMiddleware>();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers(); // Album, User vb. buradan çalışacak
+app.MapControllers();
 
-// 3. ARTIST İÇİN MINIMAL API (Hocanın Özel İsteği)
-// ArtistController'ı sildik, onun yerine burası çalışacak.
+// 3. MINIMAL API (FORMATLI CEVAPLAR)
 var artistGroup = app.MapGroup("/api/artists").WithTags("Artists (Minimal API Example)");
 
-artistGroup.MapGet("/", async (IArtistService service) => Results.Ok(await service.GetAllArtistsAsync()));
+// GET (Listeleme)
+artistGroup.MapGet("/", async (IArtistService service) => 
+{
+    var data = await service.GetAllArtistsAsync();
+    return Results.Ok(ApiResponse<object>.Ok(data, "Sanatçılar listelendi"));
+});
+
+// GET (Detay)
 artistGroup.MapGet("/{id}", async (int id, IArtistService service) => {
     var result = await service.GetArtistByIdAsync(id);
-    return result is not null ? Results.Ok(result) : Results.NotFound();
+    return result is not null 
+        ? Results.Ok(ApiResponse<object>.Ok(result)) 
+        : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
 });
+
+// POST
 artistGroup.MapPost("/", async (CreateArtistDto request, IArtistService service) => {
     var newId = await service.AddArtistAsync(request);
-    return Results.Created($"/api/artists/{newId}", new { id = newId });
-}).RequireAuthorization(); // Kilitli
+    // Created dönüşünde de formatı koruyoruz
+    return Results.Created($"/api/artists/{newId}", ApiResponse<object>.Ok(new { id = newId }, "Sanatçı eklendi"));
+}).RequireAuthorization();
+
+// PUT
 artistGroup.MapPut("/{id}", async (int id, UpdateArtistDto request, IArtistService service) => {
-    return await service.UpdateArtistAsync(id, request) ? Results.Ok("Güncellendi") : Results.NotFound();
-}).RequireAuthorization(); // Kilitli
+    return await service.UpdateArtistAsync(id, request) 
+        ? Results.Ok(ApiResponse<object>.Ok(null, "Güncellendi")) 
+        : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
+}).RequireAuthorization();
+
+// DELETE
 artistGroup.MapDelete("/{id}", async (int id, IArtistService service) => {
-    return await service.DeleteArtistAsync(id) ? Results.NoContent() : Results.NotFound();
-}).RequireAuthorization(); // Kilitli
+    return await service.DeleteArtistAsync(id) 
+        ? Results.Ok(ApiResponse<object>.Ok(null, "Silindi")) // NoContent yerine Ok dönüp mesaj gösteriyoruz
+        : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
+}).RequireAuthorization();
 
 app.Run();
