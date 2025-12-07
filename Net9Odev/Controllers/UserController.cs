@@ -1,8 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Net9Odev.Data;
 using Net9Odev.DTOs;
-using Net9Odev.Entities;
+using Net9Odev.Services;
 
 namespace Net9Odev.Controllers;
 
@@ -10,69 +9,43 @@ namespace Net9Odev.Controllers;
 [Route("api/[controller]")]
 public class UserController : ControllerBase
 {
-    private readonly AppDbContext _context;
+    private readonly IUserService _userService;
 
-    public UserController(AppDbContext context)
+    public UserController(IUserService userService)
     {
-        _context = context;
+        _userService = userService;
     }
 
-    // 1. TÜM KULLANICILARI GETİR (GET)
     [HttpGet]
-    public async Task<IActionResult> GetAll()
-    {
-        var users = await _context.Users.ToListAsync();
-        
-        // Şifreleri göndermiyoruz, sadece güvenli bilgileri DTO ile yolluyoruz
-        var dtos = users.Select(u => new UserResponseDto(
-            u.Id, u.FullName, u.Email, u.Role, u.CreatedAt
-        )).ToList();
+    public async Task<IActionResult> GetAll() => Ok(new { success = true, data = await _userService.GetAllAsync() });
 
-        return Ok(new { success = true, message = "Kullanıcılar listelendi", data = dtos });
-    }
-
-    // 2. KAYIT OL (Register)
     [HttpPost("register")]
     public async Task<IActionResult> Register(UserRegisterDto request)
     {
-        // Aynı e-posta var mı kontrolü
-        if (await _context.Users.AnyAsync(u => u.Email == request.Email))
-        {
-            return Conflict(new { success = false, message = "Bu e-posta adresi zaten kayıtlı!" });
-        }
-
-        var newUser = new User
-        {
-            FullName = request.FullName,
-            Email = request.Email,
-            Password = request.Password, // Not: Gerçek projede şifrelenmeli
-            Role = request.Role
-        };
-
-        _context.Users.Add(newUser);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { success = true, message = "Kullanıcı başarıyla oluşturuldu", data = new { newUser.Id } });
+        try { return Ok(new { success = true, message = "Kayıt başarılı", id = await _userService.RegisterAsync(request) }); }
+        catch (Exception ex) { return Conflict(new { success = false, message = ex.Message }); }
     }
 
-    // 3. GİRİŞ YAP (Login)
     [HttpPost("login")]
     public async Task<IActionResult> Login(UserLoginDto request)
     {
-        // Kullanıcıyı e-posta ve şifresine göre ara
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email && u.Password == request.Password);
+        var token = await _userService.LoginAsync(request);
+        if (token == null) return Unauthorized(new { success = false, message = "E-posta veya şifre hatalı" });
+        return Ok(new { success = true, message = "Giriş başarılı", data = new { Token = token } });
+    }
 
-        if (user == null)
-        {
-            return Unauthorized(new { success = false, message = "E-posta veya şifre hatalı!" });
-        }
+    // YENİ EKLENENLER
+    [Authorize]
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Update(int id, UpdateUserDto request)
+    {
+        return await _userService.UpdateAsync(id, request) ? Ok(new { success = true, message = "Kullanıcı güncellendi" }) : NotFound();
+    }
 
-        // Giriş başarılıysa bilgilerini dön (Bonus adımında buraya Token eklenecek)
-        return Ok(new 
-        { 
-            success = true, 
-            message = "Giriş başarılı", 
-            data = new { user.Id, user.FullName, user.Role } 
-        });
+    [Authorize]
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        return await _userService.DeleteAsync(id) ? Ok(new { success = true, message = "Kullanıcı silindi" }) : NotFound();
     }
 }

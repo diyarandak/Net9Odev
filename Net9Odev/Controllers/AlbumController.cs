@@ -1,8 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Net9Odev.Data;
 using Net9Odev.DTOs;
-using Net9Odev.Entities;
+using Net9Odev.Services;
 
 namespace Net9Odev.Controllers;
 
@@ -10,63 +9,70 @@ namespace Net9Odev.Controllers;
 [Route("api/[controller]")]
 public class AlbumController : ControllerBase
 {
-    private readonly AppDbContext _context;
+    private readonly IAlbumService _albumService;
 
-    public AlbumController(AppDbContext context)
+    public AlbumController(IAlbumService albumService)
     {
-        _context = context;
+        _albumService = albumService;
     }
 
-    // 1. TÜM ALBÜMLERİ GETİR
+    // 1. GET ALL
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var albums = await _context.Albums.ToListAsync();
-
-        var dtos = albums.Select(a => new AlbumResponseDto(
-            a.Id,
-            a.Name,
-            a.Price,
-            a.ReleaseDate,
-            a.ArtistId,
-            a.CreatedAt
-        )).ToList();
-
-        return Ok(new
-        {
-            success = true,
-            message = "Albümler listelendi",
-            data = dtos
-        });
+        var result = await _albumService.GetAllAsync();
+        return Ok(new { success = true, data = result });
     }
 
-    // 2. YENİ ALBÜM EKLE
+    // 2. GET BY ID (Yeni)
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetById(int id)
+    {
+        var result = await _albumService.GetByIdAsync(id);
+        if (result == null) return NotFound(new { success = false, message = "Albüm bulunamadı" });
+        return Ok(new { success = true, data = result });
+    }
+
+    // 3. CREATE
+    [Authorize] // Kilitli
     [HttpPost]
     public async Task<IActionResult> Create(CreateAlbumDto request)
     {
-        // Önce böyle bir sanatçı var mı diye kontrol edelim (Güvenlik)
-        var artistExists = await _context.Artists.AnyAsync(a => a.Id == request.ArtistId);
-        if (!artistExists)
+        try
         {
-            return BadRequest(new { success = false, message = "Böyle bir sanatçı bulunamadı!" });
+            var id = await _albumService.CreateAsync(request);
+            return Ok(new { success = true, message = "Albüm eklendi", data = new { id } });
         }
-
-        var newAlbum = new Album
+        catch (Exception ex)
         {
-            Name = request.Name,
-            Price = request.Price,
-            ReleaseDate = request.ReleaseDate,
-            ArtistId = request.ArtistId
-        };
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
 
-        _context.Albums.Add(newAlbum);
-        await _context.SaveChangesAsync();
-
-        return Ok(new
+    // 4. UPDATE (Yeni)
+    [Authorize] // Kilitli
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Update(int id, UpdateAlbumDto request)
+    {
+        try
         {
-            success = true,
-            message = "Albüm başarıyla eklendi",
-            data = new { newAlbum.Id }
-        });
+            var success = await _albumService.UpdateAsync(id, request);
+            if (!success) return NotFound(new { success = false, message = "Albüm bulunamadı" });
+            return Ok(new { success = true, message = "Albüm güncellendi" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+    }
+
+    // 5. DELETE (Yeni)
+    [Authorize] // Kilitli
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var success = await _albumService.DeleteAsync(id);
+        if (!success) return NotFound(new { success = false, message = "Albüm bulunamadı" });
+        return Ok(new { success = true, message = "Albüm silindi" });
     }
 }

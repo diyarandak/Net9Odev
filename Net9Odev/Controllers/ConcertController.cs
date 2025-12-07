@@ -1,8 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Net9Odev.Data;
 using Net9Odev.DTOs;
-using Net9Odev.Entities;
+using Net9Odev.Services;
 
 namespace Net9Odev.Controllers;
 
@@ -10,42 +9,32 @@ namespace Net9Odev.Controllers;
 [Route("api/[controller]")]
 public class ConcertController : ControllerBase
 {
-    private readonly AppDbContext _context;
-
-    public ConcertController(AppDbContext context)
-    {
-        _context = context;
-    }
+    private readonly IConcertService _service;
+    public ConcertController(IConcertService service) { _service = service; }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll()
-    {
-        var concerts = await _context.Concerts.ToListAsync();
-        var dtos = concerts.Select(c => new ConcertResponseDto(
-            c.Id, c.Venue, c.City, c.Date, c.ArtistId, c.CreatedAt)).ToList();
+    public async Task<IActionResult> GetAll() => Ok(await _service.GetAllAsync());
 
-        return Ok(new { success = true, message = "Konserler listelendi", data = dtos });
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetById(int id)
+    {
+        var result = await _service.GetByIdAsync(id);
+        return result is null ? NotFound() : Ok(result);
     }
 
+    [Authorize]
     [HttpPost]
     public async Task<IActionResult> Create(CreateConcertDto request)
     {
-        // Sanatçı kontrolü
-        var artistExists = await _context.Artists.AnyAsync(a => a.Id == request.ArtistId);
-        if (!artistExists)
-            return BadRequest(new { success = false, message = "Sanatçı bulunamadı!" });
-
-        var newConcert = new Concert
-        {
-            Venue = request.Venue,
-            City = request.City,
-            Date = request.Date,
-            ArtistId = request.ArtistId
-        };
-
-        _context.Concerts.Add(newConcert);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { success = true, message = "Konser başarıyla eklendi", data = new { newConcert.Id } });
+        try { return Ok(new { id = await _service.CreateAsync(request) }); }
+        catch (Exception ex) { return BadRequest(ex.Message); }
     }
+
+    [Authorize]
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Update(int id, UpdateConcertDto request) => await _service.UpdateAsync(id, request) ? Ok("Güncellendi") : NotFound();
+
+    [Authorize]
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(int id) => await _service.DeleteAsync(id) ? Ok("Silindi") : NotFound();
 }

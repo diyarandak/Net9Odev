@@ -1,8 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Net9Odev.Data;
 using Net9Odev.DTOs;
-using Net9Odev.Entities;
+using Net9Odev.Services;
 
 namespace Net9Odev.Controllers;
 
@@ -10,29 +9,28 @@ namespace Net9Odev.Controllers;
 [Route("api/[controller]")]
 public class LabelController : ControllerBase
 {
-    private readonly AppDbContext _context;
-
-    public LabelController(AppDbContext context)
-    {
-        _context = context;
-    }
+    private readonly ILabelService _service;
+    public LabelController(ILabelService service) { _service = service; }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll()
-    {
-        var labels = await _context.Labels.ToListAsync();
-        var dtos = labels.Select(l => new LabelResponseDto(l.Id, l.Name, l.Country, l.CreatedAt)).ToList();
+    public async Task<IActionResult> GetAll() => Ok(await _service.GetAllAsync());
 
-        return Ok(new { success = true, message = "Plak şirketleri listelendi", data = dtos });
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetById(int id)
+    {
+        var result = await _service.GetByIdAsync(id);
+        return result is null ? NotFound() : Ok(result);
     }
 
+    [Authorize]
     [HttpPost]
-    public async Task<IActionResult> Create(CreateLabelDto request)
-    {
-        var newLabel = new Label { Name = request.Name, Country = request.Country };
-        _context.Labels.Add(newLabel);
-        await _context.SaveChangesAsync();
+    public async Task<IActionResult> Create(CreateLabelDto request) => Ok(new { id = await _service.CreateAsync(request) });
 
-        return Ok(new { success = true, message = "Plak şirketi eklendi", data = new { newLabel.Id } });
-    }
+    [Authorize]
+    [HttpPut("{id}")]
+    public async Task<IActionResult> Update(int id, UpdateLabelDto request) => await _service.UpdateAsync(id, request) ? Ok("Güncellendi") : NotFound();
+
+    [Authorize]
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(int id) => await _service.DeleteAsync(id) ? Ok("Silindi") : NotFound();
 }
