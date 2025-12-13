@@ -7,10 +7,27 @@ using Net9Odev.Data;
 using Net9Odev.DTOs;
 using Net9Odev.Services;
 using Net9Odev.Middleware;
+using Serilog; // EKLENDİ
 
 var builder = WebApplication.CreateBuilder(args);
 
-// AYARLAR
+// ==========================================
+// 1. SERILOG AYARLARI (LOGGING)
+// ==========================================
+// Logları hem konsola hem de "logs" klasöründeki dosyaya yazar.
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .WriteTo.Console()
+    .WriteTo.File("logs/log.txt", rollingInterval: RollingInterval.Day)
+    .CreateLogger();
+
+// Serilog'u sisteme tanıtıyoruz
+builder.Host.UseSerilog();
+
+// ==========================================
+// 2. SERVİS VE VERİTABANI AYARLARI
+// ==========================================
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -19,11 +36,11 @@ builder.Services.AddEndpointsApiExplorer();
 
 // Servisler
 builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<IArtistService, ArtistService>();
-builder.Services.AddScoped<IAlbumService, AlbumService>();
-builder.Services.AddScoped<ISongService, SongService>();
-builder.Services.AddScoped<ILabelService, LabelService>();
-builder.Services.AddScoped<IConcertService, ConcertService>();
+builder.Services.AddScoped<IArtistService, ArtistService>(); // Controller kullanıyor
+builder.Services.AddScoped<IAlbumService, AlbumService>();   // Controller kullanıyor
+builder.Services.AddScoped<ISongService, SongService>();     // Minimal API kullanıyor
+builder.Services.AddScoped<ILabelService, LabelService>();   // Minimal API kullanıyor
+builder.Services.AddScoped<IConcertService, ConcertService>(); // Minimal API kullanıyor
 
 // Swagger
 builder.Services.AddSwaggerGen(c =>
@@ -54,15 +71,21 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 var app = builder.Build();
 
-// SEED DATA
+// ==========================================
+// 3. BONUS: SEED DATA
+// ==========================================
 using (var scope = app.Services.CreateScope())
 {
-    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var services = scope.ServiceProvider;
+    var context = services.GetRequiredService<AppDbContext>();
     context.Database.EnsureCreated(); 
     await Net9Odev.Data.DataSeeder.SeedAsync(context);
 }
 
-// PIPELINE
+// ==========================================
+// 4. PIPELINE
+// ==========================================
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -70,17 +93,21 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// ★ GLOBAL EXCEPTION MIDDLEWARE ★
+// Serilog otomatik olarak buradaki logları yakalar
 app.UseMiddleware<GlobalExceptionMiddleware>();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers(); // User, Album, Artist (Controller)
+app.MapControllers(); // User, Album, Artist
 
 // ==========================================
-// MINIMAL API BÖLGESİ (Concert, Song, Label)
+// 5. MINIMAL API BÖLGESİ (Concert, Song, Label)
 // ==========================================
 
-// --- A) CONCERT (Yeni Minimal API) ---
+// --- A) CONCERT ---
 var concertGroup = app.MapGroup("/api/concert").WithTags("Concerts (Minimal API)");
 
 concertGroup.MapGet("/", async (IConcertService service) => 
