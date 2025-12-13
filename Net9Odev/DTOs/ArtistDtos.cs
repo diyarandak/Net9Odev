@@ -1,22 +1,23 @@
 namespace Net9Odev.DTOs;
 
-// İŞTE EKSİK OLAN PARÇA BU: Service katmanı bunu arıyor
-public record ArtistDto(
+// 1. Listeleme ve Detay için (Controller'ın beklediği isim BU)
+public record ArtistResponseDto(
     int Id, 
     string Name, 
-    string Bio
+    string Bio, 
+    string LabelName
 );
 
-// Yeni ekleme yaparken kullandığımız paket
+// 2. Yeni Ekleme
 public record CreateArtistDto(
-    string Name,
-    string Bio,
-    int? LabelId
+    string Name, 
+    string Bio, 
+    int LabelId
 );
 
-// Güncelleme paketi
+// 3. Güncelleme
 public record UpdateArtistDto(
-    string Name,
-    string Bio,
-    int? LabelId
+    string Name, 
+    string Bio, 
+    int LabelId
 );

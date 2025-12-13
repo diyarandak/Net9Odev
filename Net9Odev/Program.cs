@@ -10,19 +10,14 @@ using Net9Odev.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ==========================================
-// 1. SERVİS VE VERİTABANI AYARLARI
-// ==========================================
-
-// A) Veritabanı Bağlantısı
+// AYARLAR
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// B) Controller Desteği
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// C) SERVİS KATMANI (Dependency Injection)
+// Servisler
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IArtistService, ArtistService>();
 builder.Services.AddScoped<IAlbumService, AlbumService>();
@@ -30,7 +25,7 @@ builder.Services.AddScoped<ISongService, SongService>();
 builder.Services.AddScoped<ILabelService, LabelService>();
 builder.Services.AddScoped<IConcertService, ConcertService>();
 
-// D) Swagger ve Güvenlik
+// Swagger
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Net9Odev API", Version = "v1" });
@@ -44,7 +39,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// E) JWT Ayarları
+// JWT
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey = Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]!);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -59,24 +54,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 var app = builder.Build();
 
-// ==========================================
-// 2. BONUS: SEED DATA (Otomatik Veri)
-// ==========================================
-// Uygulama her açıldığında veritabanını kontrol eder, boşsa Admin ekler.
+// SEED DATA
 using (var scope = app.Services.CreateScope())
 {
-    var services = scope.ServiceProvider;
-    var context = services.GetRequiredService<AppDbContext>();
-    // Veritabanı yoksa oluştur (Migrationları uygular)
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     context.Database.EnsureCreated(); 
-    // Seed datayı çalıştır
     await Net9Odev.Data.DataSeeder.SeedAsync(context);
 }
 
-// ==========================================
-// 3. HTTP REQUEST PIPELINE
-// ==========================================
-
+// PIPELINE
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -84,53 +70,96 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
-// ★ GLOBAL EXCEPTION MIDDLEWARE (Hata Yönetimi) ★
 app.UseMiddleware<GlobalExceptionMiddleware>();
-
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
+app.MapControllers(); // User, Album, Artist (Controller)
 
 // ==========================================
-// 4. MINIMAL API - ARTIST (ApiResponse Formatlı)
+// MINIMAL API BÖLGESİ (Concert, Song, Label)
 // ==========================================
-var artistGroup = app.MapGroup("/api/artists").WithTags("Artists (Minimal API Example)");
 
-// GET (Listeleme)
-artistGroup.MapGet("/", async (IArtistService service) => 
-{
-    var data = await service.GetAllArtistsAsync();
-    return Results.Ok(ApiResponse<object>.Ok(data, "Sanatçılar listelendi"));
+// --- A) CONCERT (Yeni Minimal API) ---
+var concertGroup = app.MapGroup("/api/concert").WithTags("Concerts (Minimal API)");
+
+concertGroup.MapGet("/", async (IConcertService service) => 
+    Results.Ok(ApiResponse<object>.Ok(await service.GetAllAsync(), "Konserler listelendi")));
+
+concertGroup.MapGet("/{id}", async (int id, IConcertService service) => {
+    var result = await service.GetByIdAsync(id);
+    return result is not null ? Results.Ok(ApiResponse<object>.Ok(result)) : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
 });
 
-// GET (Detay)
-artistGroup.MapGet("/{id}", async (int id, IArtistService service) => {
-    var result = await service.GetArtistByIdAsync(id);
-    return result is not null 
-        ? Results.Ok(ApiResponse<object>.Ok(result)) 
-        : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
+concertGroup.MapPost("/", async (CreateConcertDto request, IConcertService service) => {
+    try {
+        var newId = await service.CreateAsync(request);
+        return Results.Created($"/api/concert/{newId}", ApiResponse<object>.Ok(new { id = newId }, "Eklendi"));
+    } catch (Exception ex) { return Results.BadRequest(ApiResponse<object>.Fail(ex.Message)); }
+}).RequireAuthorization();
+
+concertGroup.MapPut("/{id}", async (int id, UpdateConcertDto request, IConcertService service) => {
+    return await service.UpdateAsync(id, request) 
+        ? Results.Ok(ApiResponse<object>.Ok(null, "Güncellendi")) : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
+}).RequireAuthorization();
+
+concertGroup.MapDelete("/{id}", async (int id, IConcertService service) => {
+    return await service.DeleteAsync(id) 
+        ? Results.Ok(ApiResponse<object>.Ok(null, "Silindi")) : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
+}).RequireAuthorization();
+
+
+// --- B) SONG ---
+var songGroup = app.MapGroup("/api/song").WithTags("Songs (Minimal API)");
+
+songGroup.MapGet("/", async (ISongService service) => 
+    Results.Ok(ApiResponse<object>.Ok(await service.GetAllAsync(), "Şarkılar listelendi")));
+
+songGroup.MapGet("/{id}", async (int id, ISongService service) => {
+    var result = await service.GetByIdAsync(id);
+    return result is not null ? Results.Ok(ApiResponse<object>.Ok(result)) : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
 });
 
-// POST (Kilitli)
-artistGroup.MapPost("/", async (CreateArtistDto request, IArtistService service) => {
-    var newId = await service.AddArtistAsync(request);
-    return Results.Created($"/api/artists/{newId}", ApiResponse<object>.Ok(new { id = newId }, "Sanatçı eklendi"));
+songGroup.MapPost("/", async (CreateSongDto request, ISongService service) => {
+    var newId = await service.CreateAsync(request);
+    return Results.Created($"/api/song/{newId}", ApiResponse<object>.Ok(new { id = newId }, "Eklendi"));
 }).RequireAuthorization();
 
-// PUT (Kilitli)
-artistGroup.MapPut("/{id}", async (int id, UpdateArtistDto request, IArtistService service) => {
-    return await service.UpdateArtistAsync(id, request) 
-        ? Results.Ok(ApiResponse<object>.Ok(null, "Güncellendi")) 
-        : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
+songGroup.MapPut("/{id}", async (int id, UpdateSongDto request, ISongService service) => {
+    return await service.UpdateAsync(id, request) 
+        ? Results.Ok(ApiResponse<object>.Ok(null, "Güncellendi")) : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
 }).RequireAuthorization();
 
-// DELETE (Kilitli)
-artistGroup.MapDelete("/{id}", async (int id, IArtistService service) => {
-    return await service.DeleteArtistAsync(id) 
-        ? Results.Ok(ApiResponse<object>.Ok(null, "Silindi")) 
-        : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
+songGroup.MapDelete("/{id}", async (int id, ISongService service) => {
+    return await service.DeleteAsync(id) 
+        ? Results.Ok(ApiResponse<object>.Ok(null, "Silindi")) : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
+}).RequireAuthorization();
+
+
+// --- C) LABEL ---
+var labelGroup = app.MapGroup("/api/label").WithTags("Labels (Minimal API)");
+
+labelGroup.MapGet("/", async (ILabelService service) => 
+    Results.Ok(ApiResponse<object>.Ok(await service.GetAllAsync(), "Şirketler listelendi")));
+
+labelGroup.MapGet("/{id}", async (int id, ILabelService service) => {
+    var result = await service.GetByIdAsync(id);
+    return result is not null ? Results.Ok(ApiResponse<object>.Ok(result)) : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
+});
+
+labelGroup.MapPost("/", async (CreateLabelDto request, ILabelService service) => {
+    var newId = await service.CreateAsync(request);
+    return Results.Created($"/api/label/{newId}", ApiResponse<object>.Ok(new { id = newId }, "Eklendi"));
+}).RequireAuthorization();
+
+labelGroup.MapPut("/{id}", async (int id, UpdateLabelDto request, ILabelService service) => {
+    return await service.UpdateAsync(id, request) 
+        ? Results.Ok(ApiResponse<object>.Ok(null, "Güncellendi")) : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
+}).RequireAuthorization();
+
+labelGroup.MapDelete("/{id}", async (int id, ILabelService service) => {
+    return await service.DeleteAsync(id) 
+        ? Results.Ok(ApiResponse<object>.Ok(null, "Silindi")) : Results.NotFound(ApiResponse<object>.Fail("Bulunamadı"));
 }).RequireAuthorization();
 
 app.Run();

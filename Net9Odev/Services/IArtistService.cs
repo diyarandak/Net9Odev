@@ -4,18 +4,18 @@ namespace Net9Odev.Services;
 
 public interface IArtistService
 {
-    // 1. Listeleme (Read)
-    Task<List<ArtistDto>> GetAllArtistsAsync();
+    // 1. Listeleme
+    Task<List<ArtistResponseDto>> GetAllArtistsAsync();
     
-    // 2. Tek Kayıt Getirme (Read - Detail)
-    Task<ArtistDto?> GetArtistByIdAsync(int id);
+    // 2. Detay Getirme
+    Task<ArtistResponseDto?> GetArtistByIdAsync(int id);
 
-    // 3. Ekleme (Create)
+    // 3. Ekleme
     Task<int> AddArtistAsync(CreateArtistDto request);
     
-    // 4. Güncelleme (Update) - Başarılı mı diye bool döner
+    // 4. Güncelleme
     Task<bool> UpdateArtistAsync(int id, UpdateArtistDto request);
     
-    // 5. Silme (Delete) - Başarılı mı diye bool döner
+    // 5. Silme
     Task<bool> DeleteArtistAsync(int id);
 }

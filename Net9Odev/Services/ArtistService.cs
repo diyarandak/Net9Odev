@@ -15,18 +15,31 @@ public class ArtistService : IArtistService
     }
 
     // Listeleme
-    public async Task<List<ArtistDto>> GetAllArtistsAsync()
+    public async Task<List<ArtistResponseDto>> GetAllArtistsAsync()
     {
-        var artists = await _context.Artists.ToListAsync();
-        return artists.Select(a => new ArtistDto(a.Id, a.Name, a.Bio)).ToList();
+        // İlişkili Label verisini de (Include) çekiyoruz
+        var artists = await _context.Artists.Include(a => a.Label).ToListAsync();
+        
+        return artists.Select(a => new ArtistResponseDto(
+            a.Id, 
+            a.Name, 
+            a.Bio,
+            a.Label != null ? a.Label.Name : "Şirket Yok" // Null kontrolü
+        )).ToList();
     }
 
-    // Tek Kayıt Getirme
-    public async Task<ArtistDto?> GetArtistByIdAsync(int id)
+    // Detay
+    public async Task<ArtistResponseDto?> GetArtistByIdAsync(int id)
     {
-        var artist = await _context.Artists.FindAsync(id);
-        if (artist == null) return null;
-        return new ArtistDto(artist.Id, artist.Name, artist.Bio);
+        var a = await _context.Artists.Include(x => x.Label).FirstOrDefaultAsync(x => x.Id == id);
+        if (a == null) return null;
+
+        return new ArtistResponseDto(
+            a.Id, 
+            a.Name, 
+            a.Bio,
+            a.Label != null ? a.Label.Name : "Şirket Yok"
+        );
     }
 
     // Ekleme
@@ -36,7 +49,7 @@ public class ArtistService : IArtistService
         {
             Name = request.Name,
             Bio = request.Bio,
-            LabelId = request.LabelId
+            LabelId = request.LabelId // DTO'da artık int zorunlu olduğu için direkt atıyoruz
         };
 
         _context.Artists.Add(newArtist);
@@ -48,12 +61,11 @@ public class ArtistService : IArtistService
     public async Task<bool> UpdateArtistAsync(int id, UpdateArtistDto request)
     {
         var artist = await _context.Artists.FindAsync(id);
-        if (artist == null) return false; // Bulunamadı
+        if (artist == null) return false;
 
-        // Verileri güncelle
         artist.Name = request.Name;
         artist.Bio = request.Bio;
-        if(request.LabelId.HasValue) artist.LabelId = request.LabelId.Value;
+        artist.LabelId = request.LabelId;
 
         await _context.SaveChangesAsync();
         return true;
@@ -63,9 +75,9 @@ public class ArtistService : IArtistService
     public async Task<bool> DeleteArtistAsync(int id)
     {
         var artist = await _context.Artists.FindAsync(id);
-        if (artist == null) return false; // Zaten yok
+        if (artist == null) return false;
 
-        _context.Artists.Remove(artist);
+        _context.Artists.Remove(artist); // Soft Delete otomatik devreye girer (AppDbContext ayarından dolayı)
         await _context.SaveChangesAsync();
         return true;
     }
