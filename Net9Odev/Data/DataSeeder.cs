@@ -1,4 +1,5 @@
 using Net9Odev.Entities;
+using BCrypt.Net; // Şifreleme için gerekli
 
 namespace Net9Odev.Data;
 
@@ -13,7 +14,8 @@ public static class DataSeeder
             {
                 FullName = "Admin User",
                 Email = "admin@music.com",
-                Password = "123", // Normalde hashlenmeli
+                // KRİTİK DÜZELTME: Şifreyi hashleyerek kaydediyoruz
+                Password = BCrypt.Net.BCrypt.HashPassword("123"), 
                 Role = "Admin",
                 CreatedAt = DateTime.UtcNow
             };
@@ -22,7 +24,8 @@ public static class DataSeeder
             {
                 FullName = "Normal User",
                 Email = "user@music.com",
-                Password = "123",
+                // KRİTİK DÜZELTME: Şifreyi hashleyerek kaydediyoruz
+                Password = BCrypt.Net.BCrypt.HashPassword("123"),
                 Role = "User",
                 CreatedAt = DateTime.UtcNow
             };

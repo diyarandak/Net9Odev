@@ -1,6 +1,0 @@
-@Net9Odev_HostAddress = http://localhost:5004
-
-GET {{Net9Odev_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
